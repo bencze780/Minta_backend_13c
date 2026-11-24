@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Express & MySQL CRUD – Interaktív Tanulói Tananyag</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    /* Egyedi görgetősáv és finom animációk */
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .code-line {
+      transition: background-color 0.18s ease, border-color 0.18s ease;
+    }
+    .code-line.interactive:hover {
+      background-color: rgba(99, 102, 241, 0.18);
+    }
+    .code-line.active-line {
+      background-color: rgba(99, 102, 241, 0.28);
+      border-left: 3px solid #818cf8;
+    }
+    .fade-in {
+      animation: fadeIn 0.25s ease-out forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white">
+
+  <!-- Felső fejléc és navigáció -->
+  <header class="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-lg sm:text-xl font-extrabold tracking-tight text-white">
+              Express + MySQL: <span class="text-indigo-400">INSERT, UPDATE, DELETE</span>
+            </h1>
+            <p class="text-xs sm:text-sm text-slate-400">
+              Interaktív tanulói bemutató • 13. évfolyam Backend programozás
+            </p>
+          </div>
+        </div>
+
+        <!-- Fő modulválasztó fülek -->
+        <nav class="flex flex-wrap gap-1.5" id="main-tabs" aria-label="Tananyag modulok">
+          <button data-tab="overview" class="tab-btn px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-indigo-600 text-white shadow-md shadow-indigo-600/25">
+            1. Áttekintés
+          </button>
+          <button data-tab="inspector" class="tab-btn px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-slate-800 text-slate-300 hover:bg-slate-700">
+            2. Kódelemző
+          </button>
+          <button data-tab="falsy" class="tab-btn px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-slate-800 text-slate-300 hover:bg-slate-700">
+            3. Hamis (falsy) értékek labor
+          </button>
+          <button data-tab="simulator" class="tab-btn px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-slate-800 text-slate-300 hover:bg-slate-700">
+            4. API és DB szimulátor
+          </button>
+          <button data-tab="quiz" class="tab-btn px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-slate-800 text-slate-300 hover:bg-slate-700">
+            5. Tudáspróba
+          </button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- Értesítési sáv (toast) alert() helyett -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Fő tartalmi terület -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
+    <!-- =================================================================== -->
+    <!-- 1. MODUL: ÁTTEKINTÉS ÉS CRUD TÉRKÉP                                 -->
+    <!-- =================================================================== -->
+    <section id="tab-overview" class="tab-panel fade-in space-y-6">
+      <div class="bg-gradient-to-r from-indigo-950/80 via-slate-900 to-cyan-950/60 border border-indigo-500/25 rounded-2xl p-6 sm:p-8">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 mb-3">
+          Célkitűzés
+        </span>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-white mb-3">
+          Hogyan módosít adatot egy Backend szerver?
+        </h2>
+        <p class="text-slate-300 text-sm sm:text-base max-w-3xl leading-relaxed">
+          Míg a <code class="font-mono text-cyan-300 bg-slate-800 px-1.5 py-0.5 rounded">GET</code> végpontok csak olvasnak az adatbázisból, az
+          <strong class="text-emerald-400">INSERT</strong>, <strong class="text-amber-400">UPDATE</strong> és <strong class="text-rose-400">DELETE</strong>
+          műveletek megváltoztatják az adatokat. Emiatt itt kulcsfontosságú a <strong>bemenet ellenőrzése (validáció)</strong>, az
+          <strong>SQL Injection elleni védelem</strong> és a <strong>pontos HTTP státuszkódok</strong> visszaküldése.
+        </p>
+      </div>
+
+      <!-- 3 fő művelet kártya -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <!-- INSERT -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-emerald-500/40 transition-colors flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <span class="px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-mono text-xs font-bold border border-emerald-500/30">
+                POST /szolgaltatasok
+              </span>
+              <span class="text-xs font-mono text-emerald-300 bg-slate-800 px-2 py-1 rounded-md">201 Created</span>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">INSERT – Létrehozás</h3>
+            <p class="text-sm text-slate-400 mb-4 leading-relaxed">
+              Új rekordot szúr be a <code class="font-mono text-slate-200">szolgaltatasok</code> táblába a kliens JSON törzse (<code class="font-mono text-slate-200">req.body</code>) alapján.
+            </p>
+            <ul class="space-y-2 text-xs sm:text-sm text-slate-300">
+              <li class="flex items-start gap-2">
+                <span class="text-emerald-400 font-bold">✓</span>
+                <span>Minden kötelező mezőt ellenőriz (<code class="font-mono text-amber-300">400</code> hiba, ha hiányzik).</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-emerald-400 font-bold">✓</span>
+                <span>A MySQL visszaadja az új kulcsot: <code class="font-mono text-emerald-300">result.insertId</code>.</span>
+              </li>
+            </ul>
+          </div>
+          <button onclick="openInspector('post')" class="mt-5 w-full py-2.5 px-4 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-sm font-semibold transition-all">
+            POST kód boncolása →
+          </button>
+        </div>
+
+        <!-- UPDATE -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-amber-500/40 transition-colors flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <span class="px-3 py-1 rounded-lg bg-amber-500/15 text-amber-400 font-mono text-xs font-bold border border-amber-500/30">
+                PUT /szolgaltatasok/:id
+              </span>
+              <span class="text-xs font-mono text-amber-300 bg-slate-800 px-2 py-1 rounded-md">200 OK</span>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">UPDATE – Teljes módosítás</h3>
+            <p class="text-sm text-slate-400 mb-4 leading-relaxed">
+              Az URL-ben érkező <code class="font-mono text-slate-200">:id</code> alapján felülírja a rekord <strong>összes</strong> mezőjét.
+            </p>
+            <ul class="space-y-2 text-xs sm:text-sm text-slate-300">
+              <li class="flex items-start gap-2">
+                <span class="text-amber-400 font-bold">✓</span>
+                <span>Először az ID-t ellenőrzi (<code class="font-mono text-cyan-300">ervenyesId</code>), majd az 5 mezőt.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-amber-400 font-bold">✓</span>
+                <span>Ha <code class="font-mono text-rose-300">result.affectedRows === 0</code>, akkor <code class="font-mono text-rose-300">404 Not Found</code>.</span>
+              </li>
+            </ul>
+          </div>
+          <button onclick="openInspector('put')" class="mt-5 w-full py-2.5 px-4 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 text-sm font-semibold transition-all">
+            PUT kód boncolása →
+          </button>
+        </div>
+
+        <!-- DELETE -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-rose-500/40 transition-colors flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <span class="px-3 py-1 rounded-lg bg-rose-500/15 text-rose-400 font-mono text-xs font-bold border border-rose-500/30">
+                DELETE /szolgaltatasok/:id
+              </span>
+              <span class="text-xs font-mono text-rose-300 bg-slate-800 px-2 py-1 rounded-md">200 OK</span>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">DELETE – Törlés</h3>
+            <p class="text-sm text-slate-400 mb-4 leading-relaxed">
+              Nem igényel JSON törzset (<code class="font-mono text-slate-200">req.body</code>), kizárólag az URL azonosítója alapján töröl egy sort.
+            </p>
+            <ul class="space-y-2 text-xs sm:text-sm text-slate-300">
+              <li class="flex items-start gap-2">
+                <span class="text-rose-400 font-bold">✓</span>
+                <span>Érvénytelen ID-nál (pl. <code class="font-mono">abc</code> vagy <code class="font-mono">-1</code>) azonnal <code class="font-mono text-amber-300">400</code>.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-rose-400 font-bold">✓</span>
+                <span>Nem létező ID-nál <code class="font-mono text-rose-300">affectedRows === 0</code> → <code class="font-mono text-rose-300">404</code>.</span>
+              </li>
+            </ul>
+          </div>
+          <button onclick="openInspector('delete')" class="mt-5 w-full py-2.5 px-4 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-sm font-semibold transition-all">
+            DELETE kód boncolása →
+          </button>
+        </div>
+      </div>
+
+      <!-- Összefoglaló táblázat -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+          <h3 class="text-base font-bold text-white">Összehasonlító táblázat (vizsgához / összefoglaló)</h3>
+          <span class="text-xs text-slate-400">server.js alapján</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-800/70 text-slate-300 text-xs uppercase tracking-wider">
+                <th class="py-3 px-4">SQL művelet</th>
+                <th class="py-3 px-4">HTTP végpont</th>
+                <th class="py-3 px-4">Adatforrás</th>
+                <th class="py-3 px-4">MySQL visszajelzés</th>
+                <th class="py-3 px-4">Sikeres státuszkód</th>
+                <th class="py-3 px-4">Tipikus hibák</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800 text-slate-300">
+              <tr class="hover:bg-slate-800/40">
+                <td class="py-3 px-4 font-bold text-emerald-400">INSERT</td>
+                <td class="py-3 px-4 font-mono text-xs">POST /szolgaltatasok</td>
+                <td class="py-3 px-4 font-mono text-xs text-cyan-300">req.body</td>
+                <td class="py-3 px-4 font-mono text-xs">result.insertId</td>
+                <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-xs">201 Created</span></td>
+                <td class="py-3 px-4 text-xs">400 (hiányzó mező), 500 (DB/FK hiba)</td>
+              </tr>
+              <tr class="hover:bg-slate-800/40">
+                <td class="py-3 px-4 font-bold text-amber-400">UPDATE</td>
+                <td class="py-3 px-4 font-mono text-xs">PUT /szolgaltatasok/:id</td>
+                <td class="py-3 px-4 font-mono text-xs text-cyan-300">req.params.id + req.body</td>
+                <td class="py-3 px-4 font-mono text-xs">result.affectedRows</td>
+                <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-xs">200 OK</span></td>
+                <td class="py-3 px-4 text-xs">400 (rossz ID/mező), 404 (nincs ID), 500</td>
+              </tr>
+              <tr class="hover:bg-slate-800/40">
+                <td class="py-3 px-4 font-bold text-rose-400">DELETE</td>
+                <td class="py-3 px-4 font-mono text-xs">DELETE /szolgaltatasok/:id</td>
+                <td class="py-3 px-4 font-mono text-xs text-cyan-300">req.params.id</td>
+                <td class="py-3 px-4 font-mono text-xs">result.affectedRows</td>
+                <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono text-xs">200 OK</span></td>
+                <td class="py-3 px-4 text-xs">400 (rossz ID), 404 (nincs ID), 500</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 3 biztonsági alappillér -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
+          <div class="text-indigo-400 font-bold text-sm mb-1">1. Paraméterezett SQL (?)</div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            A <code class="font-mono text-slate-200">pool.execute(..., [ertekek])</code> külön kezeli az SQL parancsot és a felhasználói adatokat, így megakadályozza az <strong>SQL Injection</strong> támadásokat.
+          </p>
+        </div>
+        <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
+          <div class="text-cyan-400 font-bold text-sm mb-1">2. Korai visszatérés (return)</div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Minden hibaágnál <code class="font-mono text-slate-200">return res.status(400)...</code> szerepel. Ha lemaradna a <code class="font-mono text-slate-200">return</code>, a kód tovább futna és <code class="font-mono text-rose-300">ERR_HTTP_HEADERS_SENT</code> hibát dobna!
+          </p>
+        </div>
+        <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
+          <div class="text-purple-400 font-bold text-sm mb-1">3. Központi hibakezelés</div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            A <code class="font-mono text-slate-200">try { ... } catch (err) { next(err); }</code> minden váratlan adatbázis-hibát (pl. rossz idegen kulcs) a fájl alján lévő <code class="font-mono text-slate-200">500</code>-as hibakezelőnek ad át.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 2. MODUL: INTERAKTÍV KÓD BONCOLÓ                                    -->
+    <!-- =================================================================== -->
+    <section id="tab-inspector" class="tab-panel hidden fade-in space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
+        <div>
+          <h2 class="text-lg sm:text-xl font-bold text-white">Interaktív kódelemző</h2>
+          <p class="text-xs sm:text-sm text-slate-400">Kattints bármelyik <span class="text-indigo-400 font-semibold">kiemelt kódszakaszra</span> a részletes magyarázatért!</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="renderCodeEndpoint('post')" id="btn-code-post" class="code-ep-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all bg-emerald-600/20 text-emerald-300 border-emerald-500/50">
+            POST (INSERT)
+          </button>
+          <button onclick="renderCodeEndpoint('put')" id="btn-code-put" class="code-ep-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all bg-slate-800 text-slate-400 border-slate-700 hover:text-white">
+            PUT (UPDATE)
+          </button>
+          <button onclick="renderCodeEndpoint('delete')" id="btn-code-delete" class="code-ep-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all bg-slate-800 text-slate-400 border-slate-700 hover:text-white">
+            DELETE (DELETE)
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        <!-- Bal oldal: Kód megjelenítő -->
+        <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          <div class="px-4 py-3 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-rose-500/80"></span>
+              <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
+              <span class="w-3 h-3 rounded-full bg-emerald-500/80"></span>
+              <span id="code-filename" class="ml-2 font-mono text-xs text-slate-300">server.js – POST /szolgaltatasok</span>
+            </div>
+            <button onclick="copyCurrentCode()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors">
+              Másolás
+            </button>
+          </div>
+          <div id="code-container" class="p-3 sm:p-4 font-mono text-xs sm:text-sm overflow-x-auto leading-relaxed">
+            <!-- JS tölti fel -->
+          </div>
+        </div>
+
+        <!-- Jobb oldal: Magyarázat kártya -->
+        <div class="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
+          <div id="explanation-card" class="bg-slate-900 border border-indigo-500/30 rounded-2xl p-5 sm:p-6 shadow-xl">
+            <div class="flex items-center gap-2 mb-3">
+              <span id="exp-badge" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                Lépés magyarázata
+              </span>
+            </div>
+            <h3 id="exp-title" class="text-lg font-bold text-white mb-2">Válassz egy kódrészletet!</h3>
+            <p id="exp-desc" class="text-sm text-slate-300 leading-relaxed mb-4">
+              Kattints a bal oldalon a halványan jelölt sorokra, hogy lásd, pontosan mit csinál az adott utasítás, és milyen hibától védi meg a szervert.
+            </p>
+            <div id="exp-tip-box" class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+              <div class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">💡 Tanári kiemelés / Tipp</div>
+              <p id="exp-tip" class="text-xs sm:text-sm text-amber-100/90 leading-relaxed">
+                A sorok közötti kattintással végigkövetheted a teljes adatáramlást a HTTP kéréstől az SQL végrehajtásig.
+              </p>
+            </div>
+          </div>
+
+          <!-- Gyors léptető gombok -->
+          <div class="flex items-center justify-between gap-3">
+            <button onclick="stepExplanation(-1)" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold border border-slate-700 transition-colors">
+              ← Előző blokk
+            </button>
+            <button onclick="stepExplanation(1)" class="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md shadow-indigo-600/20 transition-colors">
+              Következő blokk →
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 3. MODUL: FALSY CSAPDA LABOR (!ertek vs === undefined)              -->
+    <!-- =================================================================== -->
+    <section id="tab-falsy" class="tab-panel hidden fade-in space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 mb-3">
+          JavaScript validációs csapda
+        </span>
+        <h2 class="text-2xl font-extrabold text-white mb-2">
+          Miért <code class="font-mono text-emerald-400">aktiv === undefined</code>, és miért <code class="font-mono text-cyan-400">!megnevezes</code>?
+        </h2>
+        <p class="text-sm text-slate-300 leading-relaxed max-w-4xl">
+          JavaScriptben a felkiáltójel (<code class="font-mono text-amber-300">!</code>) logikai negálást végez. A nyelv <strong>6 értéket</strong> tekint hamisnak – ezeket az angol szaknyelvben <strong>falsy</strong> (azaz <code class="font-mono text-rose-300">false</code>-ra kiértékelődő) értékeknek nevezzük:
+          <code class="font-mono text-rose-300 bg-slate-800 px-1.5 py-0.5 rounded mx-0.5">false</code>,
+          <code class="font-mono text-rose-300 bg-slate-800 px-1.5 py-0.5 rounded mx-0.5">0</code>,
+          <code class="font-mono text-rose-300 bg-slate-800 px-1.5 py-0.5 rounded mx-0.5">""</code>,
+          <code class="font-mono text-rose-300 bg-slate-800 px-1.5 py-0.5 rounded mx-0.5">null</code>,
+          <code class="font-mono text-rose-300 bg-slate-800 px-1.5 py-0.5 rounded mx-0.5">undefined</code>,
+          <code class="font-mono text-rose-300 bg-slate-800 px-1.5 py-0.5 rounded mx-0.5">NaN</code>.
+          Próbáld ki az alábbi interaktív laborban, mi történik a különböző bemenetekkel!
+        </p>
+      </div>
+
+      <!-- Interaktív tesztelő -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Bemenet választó -->
+        <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <h3 class="text-base font-bold text-white">1. Válassz egy kliens által küldött értéket:</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5" id="falsy-presets">
+            <!-- JS generálja -->
+          </div>
+        </div>
+
+        <!-- Kiértékelés eredménye -->
+        <div class="lg:col-span-7 space-y-4">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+            <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Kiválasztott bemenet a req.body-ban</div>
+            <div id="falsy-selected-display" class="font-mono text-base sm:text-lg text-cyan-300 bg-slate-950 border border-slate-800 rounded-xl p-3.5">
+              { "aktiv": 0 }
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- !ertek kártya -->
+            <div id="card-bang" class="bg-slate-900 border-2 border-slate-800 rounded-2xl p-5 transition-all">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-mono text-sm font-bold text-white">if (!ertek)</span>
+                <span id="badge-bang" class="px-2.5 py-1 rounded-lg text-xs font-bold"></span>
+              </div>
+              <div class="text-xs text-slate-400 mb-3">Logikai negálás (hamisnak kiértékelődő / falsy vizsgálat)</div>
+              <div id="result-bang" class="font-mono text-sm p-3 rounded-xl bg-slate-950 border border-slate-800 mb-3"></div>
+              <p id="verdict-bang" class="text-xs sm:text-sm leading-relaxed"></p>
+            </div>
+
+            <!-- === undefined kártya -->
+            <div id="card-undef" class="bg-slate-900 border-2 border-slate-800 rounded-2xl p-5 transition-all">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-mono text-sm font-bold text-white">if (ertek === undefined)</span>
+                <span id="badge-undef" class="px-2.5 py-1 rounded-lg text-xs font-bold"></span>
+              </div>
+              <div class="text-xs text-slate-400 mb-3">Szigorú egyenlőség (nincs típuskonverzió)</div>
+              <div id="result-undef" class="font-mono text-sm p-3 rounded-xl bg-slate-950 border border-slate-800 mb-3"></div>
+              <p id="verdict-undef" class="text-xs sm:text-sm leading-relaxed"></p>
+            </div>
+          </div>
+
+          <!-- Összegző tanulság doboz -->
+          <div id="falsy-lesson" class="bg-indigo-950/50 border border-indigo-500/30 rounded-2xl p-5 text-sm text-indigo-100 leading-relaxed">
+            <!-- JS frissíti -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Haladó összehasonlító tábla -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-800">
+          <h3 class="text-base font-bold text-white">Gyors táblázat: Melyiket mikor használd?</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-800/70 text-slate-300 text-xs uppercase">
+                <th class="py-3 px-4">Mező típusa</th>
+                <th class="py-3 px-4">Példa adat</th>
+                <th class="py-3 px-4">Ajánlott ellenőrzés</th>
+                <th class="py-3 px-4">Indoklás</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800 text-slate-300 text-xs sm:text-sm">
+              <tr>
+                <td class="py-3 px-4 font-semibold text-white">Szám / Kapcsoló</td>
+                <td class="py-3 px-4 font-mono text-emerald-300">aktiv: 0, alapar: 0</td>
+                <td class="py-3 px-4 font-mono text-cyan-300">ertek === undefined</td>
+                <td class="py-3 px-4">Engedi a <code class="font-mono">0</code> értéket, csak a hiányzó kulcsot utasítja el.</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-semibold text-white">Kötelező szöveg</td>
+                <td class="py-3 px-4 font-mono text-amber-300">megnevezes: ""</td>
+                <td class="py-3 px-4 font-mono text-cyan-300">!megnevezes</td>
+                <td class="py-3 px-4">Egyszerre fogja meg a hiányzó mezőt (<code class="font-mono">undefined</code>), a <code class="font-mono">null</code>-t és az üres szöveget (<code class="font-mono">""</code>).</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-semibold text-white">Szigorú szöveg (haladó)</td>
+                <td class="py-3 px-4 font-mono text-rose-300">megnevezes: "   "</td>
+                <td class="py-3 px-4 font-mono text-cyan-300">!megnevezes || !megnevezes.trim()</td>
+                <td class="py-3 px-4">A csak szóközökből álló nevet is kiszűri!</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 4. MODUL: ÉLŐ API & ADATBÁZIS SZIMULÁTOR                            -->
+    <!-- =================================================================== -->
+    <section id="tab-simulator" class="tab-panel hidden fade-in space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <div>
+          <h2 class="text-xl font-bold text-white">Élő Express + MySQL szimulátor</h2>
+          <p class="text-xs sm:text-sm text-slate-400">
+            Küldj valódi <code class="font-mono text-emerald-400">POST</code>, <code class="font-mono text-amber-400">PUT</code> és <code class="font-mono text-rose-400">DELETE</code> kéréseket a virtuális <code class="font-mono text-slate-200">szolgaltatasok</code> táblára!
+          </p>
+        </div>
+        <button onclick="resetDatabase()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-semibold border border-slate-700 transition-colors shrink-0">
+          ↻ Adatbázis alaphelyzetbe
+        </button>
+      </div>
+
+      <!-- 1 kattintásos teszt forgatókönyvek -->
+      <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
+        <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5">Gyors tesztesetek (1 kattintás):</div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="loadPreset('post_ok')" class="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-all">
+            ✅ POST: Új inaktív szolgáltatás (aktiv: 0)
+          </button>
+          <button onclick="loadPreset('post_missing')" class="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all">
+            ⚠️ POST: Hiányzó név (400)
+          </button>
+          <button onclick="loadPreset('put_ok')" class="px-3 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-all">
+            ✏️ PUT: ID=1 módosítása (200)
+          </button>
+          <button onclick="loadPreset('put_404')" class="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all">
+            🔍 PUT: Nem létező ID=99 (404)
+          </button>
+          <button onclick="loadPreset('delete_bad_id')" class="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all">
+            🚫 DELETE: Hibás ID="abc" (400)
+          </button>
+          <button onclick="loadPreset('delete_ok')" class="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all">
+            🗑️ DELETE: ID=2 törlése (200)
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Bal: REST Kliens -->
+        <div class="lg:col-span-6 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300">1. Kliens kérés (Postman / REST Client)</h3>
+
+          <div class="flex flex-col sm:flex-row gap-2">
+            <select id="sim-method" onchange="onSimMethodChange()" class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 font-mono text-sm font-bold text-white focus:outline-none focus:border-indigo-500">
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+            <div class="flex-1 flex items-center bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 font-mono text-sm text-slate-300">
+              <span class="text-slate-500 select-none">/szolgaltatasok</span>
+              <span id="sim-id-slash" class="text-slate-500 hidden">/</span>
+              <input id="sim-id" type="text" placeholder="id (pl. 1)" class="hidden bg-transparent text-cyan-300 focus:outline-none w-full ml-0.5" />
+            </div>
+          </div>
+
+          <div id="sim-body-wrapper">
+            <label for="sim-body" class="block text-xs font-semibold text-slate-400 mb-1.5">Kérés törzse (Request Body – JSON)</label>
+            <textarea id="sim-body" rows="7" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 font-mono text-xs sm:text-sm text-emerald-300 focus:outline-none focus:border-indigo-500"></textarea>
+          </div>
+
+          <button onclick="sendSimulatedRequest()" class="w-full py-3 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/25 transition-all">
+            ▶ Kérés elküldése a szervernek
+          </button>
+        </div>
+
+        <!-- Jobb: Szerver Napló & Válasz -->
+        <div class="lg:col-span-6 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300">2. Szerveroldali feldolgozás és válasz</h3>
+            <span id="sim-status-badge" class="px-3 py-1 rounded-lg font-mono text-xs font-bold bg-slate-800 text-slate-400">
+              Várakozás...
+            </span>
+          </div>
+
+          <!-- Lefuttatott SQL -->
+          <div>
+            <div class="text-xs text-slate-400 font-semibold mb-1">Lefuttatott SQL és paraméterek:</div>
+            <pre id="sim-sql" class="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-amber-300 overflow-x-auto min-h-[56px]">// Küldj egy kérést a vizsgálathoz...</pre>
+          </div>
+
+          <!-- MySQL result objektum -->
+          <div>
+            <div class="text-xs text-slate-400 font-semibold mb-1">MySQL visszajelzés (<code class="font-mono">result</code>):</div>
+            <pre id="sim-db-result" class="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-cyan-300 overflow-x-auto">// { insertId / affectedRows }</pre>
+          </div>
+
+          <!-- HTTP JSON Válasz -->
+          <div>
+            <div class="text-xs text-slate-400 font-semibold mb-1">HTTP JSON válasz a kliensnek:</div>
+            <pre id="sim-response" class="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-emerald-300 overflow-x-auto">// JSON válasz</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Élő MySQL tábla -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Élő MySQL tábla: <code class="font-mono text-cyan-300">szolgaltatasok</code>
+          </h3>
+          <span id="db-count" class="text-xs font-mono text-slate-400">3 rekord</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr class="bg-slate-800/70 text-slate-300 font-mono text-xs">
+                <th class="py-2.5 px-4">id</th>
+                <th class="py-2.5 px-4">kategoria_id</th>
+                <th class="py-2.5 px-4">megnevezes</th>
+                <th class="py-2.5 px-4">alapar (Ft)</th>
+                <th class="py-2.5 px-4">munkaido_perc</th>
+                <th class="py-2.5 px-4">aktiv</th>
+              </tr>
+            </thead>
+            <tbody id="db-table-body" class="divide-y divide-slate-800 font-mono text-slate-300">
+              <!-- JS tölti fel -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- 5. MODUL: ÖNELLENŐRZŐ TUDÁSPRÓBA (KVÍZ)                             -->
+    <!-- =================================================================== -->
+    <section id="tab-quiz" class="tab-panel hidden fade-in space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-2xl font-extrabold text-white mb-1">5 perces tudáspróba</h2>
+          <p class="text-sm text-slate-400">Teszteld, mennyire érted a <code class="font-mono text-slate-200">server.js</code> CRUD végpontjait és a validációs buktatókat!</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-sm font-bold">
+            Pontszám: <span id="quiz-score" class="text-indigo-400">0</span> / <span id="quiz-total">6</span>
+          </div>
+          <button onclick="resetQuiz()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors">
+            Újrakezdés
+          </button>
+        </div>
+      </div>
+
+      <div id="quiz-container" class="space-y-4">
+        <!-- JS generálja -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Lábléc -->
+  <footer class="border-t border-slate-800 bg-slate-900/50 py-5 mt-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+      <div>Backend Programozás • Express + MySQL CRUD Interaktív Tananyag</div>
+      <div>Készült a <code class="font-mono text-slate-400">server.js</code> forráskód alapján</div>
+    </div>
+  </footer>
+
+  <!-- ===================================================================== -->
+  <!-- ALKALMAZÁS LOGIKA (JAVASCRIPT)                                        -->
+  <!-- ===================================================================== -->
+  <script>
+    // =========================================================================
+    // 1. GLOBÁLIS FÜLKEZELÉS & ÉRTESÍTÉSEK
+    // =========================================================================
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabPanels = document.querySelectorAll('.tab-panel');
+
+    function switchTab(tabId) {
+      tabButtons.forEach((btn) => {
+        const isActive = btn.dataset.tab === tabId;
+        btn.className = isActive
+          ? 'tab-btn px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
+          : 'tab-btn px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-slate-800 text-slate-300 hover:bg-slate-700';
+      });
+      tabPanels.forEach((panel) => {
+        if (panel.id === `tab-${tabId}`) {
+          panel.classList.remove('hidden');
+        } else {
+          panel.classList.add('hidden');
+        }
+      });
+    }
+
+    tabButtons.forEach((btn) => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    function openInspector(ep) {
+      switchTab('inspector');
+      renderCodeEndpoint(ep);
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const el = document.createElement('div');
+      const colors = {
+        info: 'bg-indigo-600 text-white border-indigo-400',
+        success: 'bg-emerald-600 text-white border-emerald-400',
+        error: 'bg-rose-600 text-white border-rose-400',
+      };
+      el.className = `pointer-events-auto px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold shadow-xl border ${colors[type] || colors.info} fade-in`;
+      el.textContent = message;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 2600);
+    }
+
+    // =========================================================================
+    // 2. KÓD BONCOLÓ ADATOK ÉS LOGIKA
+    // =========================================================================
+    const codeEndpoints = {
+      post: {
+        filename: 'server.js – POST /szolgaltatasok (INSERT)',
+        blocks: [
+          {
+            id: 'post-route',
+            badge: '1. Végpont definíció',
+            title: 'POST útvonal és aszinkron kezelő',
+            desc: 'Az app.post() fogadja az új erőforrás létrehozására irányuló HTTP kéréseket. Az async kulcsszó azért kell, mert az adatbázis-műveletre await-tel várunk.',
+            tip: 'A 3. paraméter (next) a központi hibakezelőhöz való továbbításhoz szükséges.',
+            lines: [
+              'app.post("/szolgaltatasok", async (req, res, next) => {',
+              '  try {'
+            ]
+          },
+          {
+            id: 'post-destructure',
+            badge: '2. Adatok kinyerése',
+            title: 'Destrukturálás biztonsági védőhálóval (|| {})',
+            desc: 'Kivesszük az 5 mezőt a req.body objektumból. A "|| {}" megvédi a szervert az összeomlástól, ha a kliens üres törzset küldött vagy lefelejtette a Content-Type: application/json fejlécet.',
+            tip: 'Ha a req.body undefined lenne és nem lenne ott a "|| {}", a destrukturálás TypeError-t dobna!',
+            lines: [
+              '    const {',
+              '      kategoria_id, megnevezes, alapar, munkaido_perc, aktiv',
+              '    } = req.body || {};'
+            ]
+          },
+          {
+            id: 'post-validate',
+            badge: '3. Bemenet validáció',
+            title: 'Kötelező mezők ellenőrzése (400 Bad Request)',
+            desc: 'Ha bármelyik kötelező mező hiányzik, azonnal visszatérünk (return) 400-as státuszkóddal és hibaüzenettel, még mielőtt az adatbázist terhelnénk.',
+            tip: 'Figyeld meg: a számoknál === undefined szerepel, hogy a 0 (pl. aktiv: 0) átmenjen, míg a szövegnél !megnevezes az üres szöveget ("") is megfogja!',
+            lines: [
+// ... existing code ... -->
+      {
+        id: 'aktiv_0',
+        label: 'Inaktív szolgáltatás: aktiv = 0',
+        json: '{ "aktiv": 0 }',
+        value: 0,
+        desiredError: false,
+        lesson: 'Pontosan ezért NEM szabad "!aktiv"-ot írni! A 0 szám JavaScriptben hamisnak (falsy) értékelődik ki, így a "!0" igaz (true) lenne, és a szerver tévesen 400-as hibával eldobná a teljesen érvényes inaktív szolgáltatást. Az "aktiv === undefined" viszont hamis (false), tehát átengedi a 0-t!'
+      },
+      {
+        id: 'alapar_0',
+        label: 'Ingyenes szolgáltatás: alapar = 0',
+        json: '{ "alapar": 0 }',
+        value: 0,
+        desiredError: false,
+        lesson: 'Ha egy állapotfelmérés ingyenes (0 Ft), a "!alapar" tévesen hibát dobna, mert a 0 hamisnak (falsy) számít. A "=== undefined" szigorú összehasonlítás biztonságosan átengedi a 0 Ft-os árat is.'
+      },
+      {
+        id: 'missing',
+        label: 'Hiányzó mező (nincs a JSON-ben)',
+        json: '{}  // a kulcs értéke: undefined',
+        value: undefined,
+        desiredError: true,
+        lesson: 'Ha a kliens ténylegesen lefelejtette a mezőt a JSON-ből, az értéke undefined. Ilyenkor mindkét ellenőrzés (!ertek és ertek === undefined is) true-t ad, tehát mindkettő helyesen 400-as hibával állítja meg a kérést.'
+      },
+      {
+        id: 'empty_str',
+        label: 'Üres szöveg: megnevezes = ""',
+        json: '{ "megnevezes": "" }',
+        value: '',
+        desiredError: true,
+        lesson: 'Itt fordul meg a helyzet! A szövegnél NEM akarjuk engedni az üres nevet (""). A "=== undefined" átengedné (mert az üres szöveg nem undefined), a "!megnevezes" viszont elkapja, mert az üres szöveg hamisnak (falsy) értékelődik ki!'
+      },
+      {
+        id: 'valid_str',
+        label: 'Érvényes szöveg: megnevezes = "Olajcsere"',
+        json: '{ "megnevezes": "Olajcsere" }',
+        value: 'Olajcsere',
+        desiredError: false,
+        lesson: 'A nem üres szöveg igaznak (truthy) értékelődik ki, és nem is undefined, tehát mindkét vizsgálat hamis (false) eredményt ad – a kérés gond nélkül továbbmehet az adatbázisba.'
+      },
+      {
+        id: 'spaces_str',
+        label: 'Csak szóközök: megnevezes = "   " (haladó)',
+        json: '{ "megnevezes": "   " }',
+        value: '   ',
+        desiredError: true,
+        lesson: 'Beugratós eset! A "   " nem üres szöveg, ezért igaznak (truthy) számít – mind a !megnevezes, mind a === undefined átengedi! Valós projektekben ezért érdemes "!megnevezes || !megnevezes.trim()" ellenőrzést használni.'
+      }
+        ]
+      },
+      put: {
+        filename: 'server.js – PUT /szolgaltatasok/:id (UPDATE)',
+        blocks: [
+          {
+            id: 'put-id',
+            badge: '1. Útvonal-paraméter ellenőrzése',
+            title: 'Az :id validálása (ervenyesId)',
+            desc: 'A PUT kérés az URL-ben kapja meg a módosítandó rekord azonosítóját (req.params.id). Az ervenyesId() ellenőrzi, hogy pozitív egész szám-e.',
+            tip: 'Ha valaki a /szolgaltatasok/alma vagy /szolgaltatasok/-5 címet hívja, nem is fordulunk a MySQL-hez, azonnal 400-at adunk.',
+            lines: [
+              'app.put("/szolgaltatasok/:id", async (req, res, next) => {',
+              '  try {',
+              '    if (!ervenyesId(req.params.id)) {',
+              '      return res.status(400).json({ hiba: "Érvénytelen azonosító" });',
+              '    }'
+            ]
+          },
+          {
+            id: 'put-validate',
+            badge: '2. Teljes rekord ellenőrzése',
+            title: 'Miért kötelező minden mező PUT esetén?',
+            desc: 'A REST szabvány szerint a PUT a teljes erőforrás felülírását jelenti (részleges módosításra a PATCH való). Ezért mind az 5 mezőt meg kell adni.',
+            tip: 'Érdekesség: itt megnevezes === undefined szerepel !megnevezes helyett – így az üres "" szöveg technikailag átcsúszna, ha nem szűrjük külön!',
+            lines: [
+              '    const { kategoria_id, megnevezes, alapar, munkaido_perc, aktiv } = req.body || {};',
+              '    if (',
+              '      kategoria_id === undefined || megnevezes === undefined ||',
+              '      alapar === undefined || munkaido_perc === undefined ||',
+              '      aktiv === undefined',
+              '    ) {',
+              '      return res.status(400).json({',
+              '        hiba: "A módosításhoz minden mező megadása szükséges"',
+              '      });',
+              '    }'
+            ]
+          },
+          {
+            id: 'put-sql',
+            badge: '3. UPDATE utasítás',
+            title: 'WHERE feltétel és a paraméterek sorrendje',
+            desc: 'A SET részben felsoroljuk az 5 új értéket, a végén pedig a WHERE id = ? korlátozza a módosítást egyetlen sorra.',
+            tip: 'KRITIKUS: A paramétertömbben a Number(req.params.id) kötelezően az UTOLSÓ (6.) elem, mert az SQL-ben a 6. kérdőjel a WHERE ágban van!',
+            lines: [
+              '    const [result] = await pool.execute(`',
+              '      UPDATE szolgaltatasok',
+              '      SET kategoria_id = ?, megnevezes = ?, alapar = ?,',
+              '          munkaido_perc = ?, aktiv = ?',
+              '      WHERE id = ?',
+              '    `, [kategoria_id, megnevezes, alapar, munkaido_perc, aktiv, Number(req.params.id)]);'
+            ]
+          },
+          {
+            id: 'put-affected',
+            badge: '4. Létezett a rekord?',
+            title: 'result.affectedRows === 0 → 404 Not Found',
+            desc: 'Ha a megadott ID nem létezik a táblában, a MySQL nem dob hibát, csak 0 sort módosít. Ezt a result.affectedRows értékével ellenőrizzük.',
+            tip: 'Ha nem lenne ez az if ág, a szerver nem létező ID esetén is azt hazudná a kliensnek, hogy "A módosítás sikeres"!',
+            lines: [
+              '    if (result.affectedRows === 0) {',
+              '      return res.status(404).json({ hiba: "A szolgáltatás nem található" });',
+              '    }',
+              '    res.json({ uzenet: "A szolgáltatás módosítása sikeres" });',
+              '  } catch (err) {',
+              '    next(err);',
+              '  }',
+              '});'
+            ]
+          }
+        ]
+      },
+      delete: {
+        filename: 'server.js – DELETE /szolgaltatasok/:id (DELETE)',
+        blocks: [
+          {
+            id: 'del-id',
+            badge: '1. Azonosító ellenőrzése',
+            title: 'Nincs req.body, csak :id paraméter',
+            desc: 'Törléshez nincs szükség kérés-törzsre. Egyetlen bemenetünk az URL-ből érkező azonosító, amit az ervenyesId() függvénnyel ellenőrzünk.',
+            tip: 'Az ervenyesId(id) kódja: Number.isInteger(Number(id)) && Number(id) > 0.',
+            lines: [
+              'app.delete("/szolgaltatasok/:id", async (req, res, next) => {',
+              '  try {',
+              '    if (!ervenyesId(req.params.id)) {',
+              '      return res.status(400).json({ hiba: "Érvénytelen azonosító" });',
+              '    }'
+            ]
+          },
+          {
+            id: 'del-sql',
+            badge: '2. DELETE végrehajtása',
+            title: 'Biztonságos sor törlése',
+            desc: 'A DELETE FROM szolgaltatasok WHERE id = ? utasítás paraméterezve törli a megadott rekordot.',
+            tip: 'Soha ne hagyd le a WHERE záradékot egy DELETE parancsról, különben a teljes tábla kiürül!',
+            lines: [
+              '    const [result] = await pool.execute(',
+              '      "DELETE FROM szolgaltatasok WHERE id = ?",',
+              '      [Number(req.params.id)]',
+              '    );'
+            ]
+          },
+          {
+            id: 'del-affected',
+            badge: '3. Eredmény ellenőrzése',
+            title: '404 nem létező rekordnál, 200 siker esetén',
+            desc: 'Ha result.affectedRows === 0, akkor nem volt ilyen ID a táblában (404). Ellenkező esetben 200 OK státusszal és JSON üzenettel válaszolunk.',
+            tip: 'Ha a törölni kívánt szolgáltatásra másik tábla idegen kulccsal hivatkozik, a MySQL hibát dob, amit a catch -> next(err) 500-as válasszal kezel.',
+            lines: [
+              '    if (result.affectedRows === 0) {',
+              '      return res.status(404).json({ hiba: "A szolgáltatás nem található" });',
+              '    }',
+              '    res.json({ uzenet: "A szolgáltatás törlése sikeres" });',
+              '  } catch (err) {',
+              '    next(err);',
+              '  }',
+              '});'
+            ]
+          }
+        ]
+      }
+    };
+
+    let currentEndpointKey = 'post';
+    let currentBlockIndex = 0;
+
+    function renderCodeEndpoint(epKey) {
+      currentEndpointKey = epKey;
+      currentBlockIndex = 0;
+      const ep = codeEndpoints[epKey];
+
+      // Gombok stílusa
+      const styles = {
+        post: 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50',
+        put: 'bg-amber-600/20 text-amber-300 border-amber-500/50',
+        delete: 'bg-rose-600/20 text-rose-300 border-rose-500/50'
+      };
+      ['post', 'put', 'delete'].forEach((k) => {
+        const btn = document.getElementById(`btn-code-${k}`);
+        btn.className = `code-ep-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all ${
+          k === epKey ? styles[k] : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+        }`;
+      });
+
+      document.getElementById('code-filename').textContent = ep.filename;
+
+      const container = document.getElementById('code-container');
+      container.innerHTML = '';
+      let lineNum = 1;
+
+      ep.blocks.forEach((block, bIdx) => {
+        const blockDiv = document.createElement('div');
+        blockDiv.className = `code-line interactive cursor-pointer rounded-lg px-2 py-1 my-0.5 border-l-[3px] border-transparent`;
+        blockDiv.dataset.blockIndex = bIdx;
+        blockDiv.onclick = () => selectExplanationBlock(bIdx);
+
+        block.lines.forEach((lineText) => {
+          const row = document.createElement('div');
+          row.className = 'flex items-start';
+          const numSpan = document.createElement('span');
+          numSpan.className = 'w-7 shrink-0 text-slate-600 select-none text-right pr-3';
+          numSpan.textContent = lineNum++;
+
+          const codeSpan = document.createElement('span');
+          codeSpan.className = 'whitespace-pre text-slate-200';
+          codeSpan.textContent = lineText;
+
+          row.appendChild(numSpan);
+          row.appendChild(codeSpan);
+          blockDiv.appendChild(row);
+        });
+
+        container.appendChild(blockDiv);
+      });
+
+      selectExplanationBlock(0);
+    }
+
+    function selectExplanationBlock(bIdx) {
+      const ep = codeEndpoints[currentEndpointKey];
+      currentBlockIndex = bIdx;
+      const block = ep.blocks[bIdx];
+
+      document.querySelectorAll('#code-container .code-line').forEach((el, idx) => {
+        if (idx === bIdx) {
+          el.classList.add('active-line');
+        } else {
+          el.classList.remove('active-line');
+        }
+      });
+
+      document.getElementById('exp-badge').textContent = block.badge;
+      document.getElementById('exp-title').textContent = block.title;
+      document.getElementById('exp-desc').textContent = block.desc;
+      document.getElementById('exp-tip').textContent = block.tip;
+    }
+
+    function stepExplanation(delta) {
+      const ep = codeEndpoints[currentEndpointKey];
+      const nextIdx = (currentBlockIndex + delta + ep.blocks.length) % ep.blocks.length;
+      selectExplanationBlock(nextIdx);
+    }
+
+    function copyCurrentCode() {
+      const ep = codeEndpoints[currentEndpointKey];
+      const fullCode = ep.blocks.map((b) => b.lines.join('\n')).join('\n');
+      const textarea = document.createElement('textarea');
+      textarea.value = fullCode;
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('Kód a vágólapra másolva!', 'success');
+      } catch (e) {
+        showToast('A másolás nem sikerült.', 'error');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    // =========================================================================
+    // 3. FALSY CSAPDA LABOR LOGIKA
+    // =========================================================================
+    const falsyCases = [
+      {
+        id: 'aktiv_0',
+        label: 'Inaktív szolgáltatás: aktiv = 0',
+        json: '{ "aktiv": 0 }',
+        value: 0,
+        desiredError: false,
+        lesson: 'Pontosan ezért NEM szabad "!aktiv"-ot írni! A 0 szám JavaScriptben falsy, így a "!0" igaz (true) lenne, és a szerver tévesen 400-as hibával eldobná a teljesen érvényes inaktív szolgáltatást. Az "aktiv === undefined" viszont hamis (false), tehát átengedi a 0-t!'
+      },
+      {
+        id: 'alapar_0',
+        label: 'Ingyenes szolgáltatás: alapar = 0',
+        json: '{ "alapar": 0 }',
+        value: 0,
+        desiredError: false,
+        lesson: 'Ha egy állapotfelmérés ingyenes (0 Ft), a "!alapar" tévesen hibát dobna, mert a 0 falsy. A "=== undefined" szigorú összehasonlítás biztonságosan átengedi a 0 Ft-os árat is.'
+      },
+      {
+        id: 'missing',
+        label: 'Hiányzó mező (nincs a JSON-ben)',
+        json: '{}  // a kulcs értéke: undefined',
+        value: undefined,
+        desiredError: true,
+        lesson: 'Ha a kliens ténylegesen lefelejtette a mezőt a JSON-ből, az értéke undefined. Ilyenkor mindkét ellenőrzés (!ertek és ertek === undefined is) true-t ad, tehát mindkettő helyesen 400-as hibával állítja meg a kérést.'
+      },
+      {
+        id: 'empty_str',
+        label: 'Üres szöveg: megnevezes = ""',
+        json: '{ "megnevezes": "" }',
+        value: '',
+        desiredError: true,
+        lesson: 'Itt fordul meg a helyzet! A szövegnél NEM akarjuk engedni az üres nevet (""). A "=== undefined" átengedné (mert az üres string nem undefined), a "!megnevezes" viszont elkapja, mert az üres string falsy!'
+      },
+      {
+        id: 'valid_str',
+        label: 'Érvényes szöveg: megnevezes = "Olajcsere"',
+        json: '{ "megnevezes": "Olajcsere" }',
+        value: 'Olajcsere',
+        desiredError: false,
+        lesson: 'A nem üres szöveg truthy, és nem is undefined, tehát mindkét vizsgálat hamis (false) eredményt ad – a kérés gond nélkül továbbmehet az adatbázisba.'
+      },
+      {
+        id: 'spaces_str',
+        label: 'Csak szóközök: megnevezes = "   " (Haladó!)',
+        json: '{ "megnevezes": "   " }',
+        value: '   ',
+        desiredError: true,
+        lesson: 'Beugratós eset! A "   " nem üres string, ezért truthy – mind a !megnevezes, mind a === undefined átengedi! Valós projektekben ezért érdemes "!megnevezes || !megnevezes.trim()" ellenőrzést használni.'
+      }
+    ];
+
+    function initFalsyLab() {
+      const container = document.getElementById('falsy-presets');
+      container.innerHTML = '';
+      falsyCases.forEach((c, idx) => {
+        const btn = document.createElement('button');
+        btn.id = `falsy-btn-${c.id}`;
+        btn.className = 'falsy-case-btn text-left px-4 py-3 rounded-xl border text-xs sm:text-sm font-medium transition-all';
+        btn.textContent = c.label;
+        btn.onclick = () => selectFalsyCase(idx);
+        container.appendChild(btn);
+      });
+      selectFalsyCase(0);
+    }
+
+    function selectFalsyCase(idx) {
+      const c = falsyCases[idx];
+      document.querySelectorAll('.falsy-case-btn').forEach((btn, i) => {
+        btn.className = i === idx
+          ? 'falsy-case-btn text-left px-4 py-3 rounded-xl border text-xs sm:text-sm font-semibold transition-all bg-indigo-600/25 border-indigo-400 text-white'
+          : 'falsy-case-btn text-left px-4 py-3 rounded-xl border text-xs sm:text-sm font-medium transition-all bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-600';
+      });
+
+      document.getElementById('falsy-selected-display').textContent = c.json;
+
+      const bangTriggersError = !c.value;
+      const undefTriggersError = c.value === undefined;
+
+      const bangCorrect = bangTriggersError === c.desiredError;
+      const undefCorrect = undefTriggersError === c.desiredError;
+
+      // !ertek kártya frissítése
+      const cardBang = document.getElementById('card-bang');
+      const badgeBang = document.getElementById('badge-bang');
+      const resBang = document.getElementById('result-bang');
+      const verdBang = document.getElementById('verdict-bang');
+
+      cardBang.className = `bg-slate-900 border-2 rounded-2xl p-5 transition-all ${bangCorrect ? 'border-emerald-500/50' : 'border-rose-500/60'}`;
+      badgeBang.className = `px-2.5 py-1 rounded-lg text-xs font-bold ${bangCorrect ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`;
+      badgeBang.textContent = bangCorrect ? 'HELYES VISELKEDÉS' : 'HIBÁS / CSAPDA!';
+      resBang.innerHTML = `!ertek → <strong class="${bangTriggersError ? 'text-amber-400' : 'text-emerald-400'}">${bangTriggersError}</strong> → ${bangTriggersError ? '400 Bad Request' : 'Átengedi az adatot'}`;
+      verdBang.className = `text-xs sm:text-sm leading-relaxed ${bangCorrect ? 'text-slate-300' : 'text-rose-200'}`;
+      verdBang.textContent = bangTriggersError
+        ? (c.desiredError ? 'Elkapta a hibás/hiányzó adatot.' : 'TÉVES HIBA! Eldobott egy érvényes adatot!')
+        : (c.desiredError ? 'ÁTCSÚSZOTT! Nem fogta meg a hibás adatot!' : 'Helyesen átengedte az érvényes adatot.');
+
+      // === undefined kártya frissítése
+      const cardUndef = document.getElementById('card-undef');
+      const badgeUndef = document.getElementById('badge-undef');
+      const resUndef = document.getElementById('result-undef');
+      const verdUndef = document.getElementById('verdict-undef');
+
+      cardUndef.className = `bg-slate-900 border-2 rounded-2xl p-5 transition-all ${undefCorrect ? 'border-emerald-500/50' : 'border-rose-500/60'}`;
+      badgeUndef.className = `px-2.5 py-1 rounded-lg text-xs font-bold ${undefCorrect ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`;
+      badgeUndef.textContent = undefCorrect ? 'HELYES VISELKEDÉS' : 'HIBÁS / CSAPDA!';
+      resUndef.innerHTML = `ertek === undefined → <strong class="${undefTriggersError ? 'text-amber-400' : 'text-emerald-400'}">${undefTriggersError}</strong> → ${undefTriggersError ? '400 Bad Request' : 'Átengedi az adatot'}`;
+      verdUndef.className = `text-xs sm:text-sm leading-relaxed ${undefCorrect ? 'text-slate-300' : 'text-rose-200'}`;
+      verdUndef.textContent = undefTriggersError
+        ? (c.desiredError ? 'Elkapta a hiányzó kulcsot.' : 'TÉVES HIBA!')
+        : (c.desiredError ? 'ÁTCSÚSZOTT! Nem fogta meg az üres szöveget!' : 'Helyesen átengedte az érvényes értéket (pl. 0).');
+
+      document.getElementById('falsy-lesson').innerHTML = `<strong class="text-indigo-300">Tanulság:</strong> ${c.lesson}`;
+    }
+
+    // =========================================================================
+    // 4. ÉLŐ API & MYSQL SZIMULÁTOR
+    // =========================================================================
+    const initialDb = [
+      { id: 1, kategoria_id: 1, megnevezes: 'Olajcsere és szűrőcsere', alapar: 18500, munkaido_perc: 45, aktiv: 1 },
+      { id: 2, kategoria_id: 2, megnevezes: 'Fékbetét csere (első)', alapar: 24000, munkaido_perc: 60, aktiv: 1 },
+      { id: 3, kategoria_id: 1, megnevezes: 'Téli állapotfelmérés', alapar: 0, munkaido_perc: 20, aktiv: 0 }
+    ];
+
+    let dbRows = [];
+    let nextAutoIncrementId = 4;
+
+    function ervenyesId(id) {
+      return id !== '' && Number.isInteger(Number(id)) && Number(id) > 0;
+    }
+
+    function resetDatabase() {
+      dbRows = initialDb.map((r) => ({ ...r }));
+      nextAutoIncrementId = 4;
+      renderDbTable();
+      showToast('Virtuális MySQL tábla alaphelyzetbe állítva.', 'info');
+    }
+
+    function renderDbTable(highlightId = null) {
+      const tbody = document.getElementById('db-table-body');
+      tbody.innerHTML = '';
+      document.getElementById('db-count').textContent = `${dbRows.length} rekord`;
+
+      if (dbRows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-slate-500">A tábla jelenleg üres.</td></tr>';
+        return;
+      }
+
+      dbRows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.className = row.id === highlightId
+          ? 'bg-indigo-500/20 transition-colors'
+          : 'hover:bg-slate-800/40 transition-colors';
+        tr.innerHTML = `
+          <td class="py-2.5 px-4 font-bold text-cyan-300">${row.id}</td>
+          <td class="py-2.5 px-4">${row.kategoria_id}</td>
+          <td class="py-2.5 px-4 text-white font-sans font-medium">${escapeHtml(String(row.megnevezes))}</td>
+          <td class="py-2.5 px-4">${Number(row.alapar).toLocaleString('hu-HU')} Ft</td>
+          <td class="py-2.5 px-4">${row.munkaido_perc} perc</td>
+          <td class="py-2.5 px-4">
+            <span class="px-2 py-0.5 rounded text-xs font-bold ${Number(row.aktiv) === 1 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700 text-slate-300'}">
+              ${row.aktiv} (${Number(row.aktiv) === 1 ? 'aktív' : 'inaktív'})
+            </span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function onSimMethodChange() {
+      const method = document.getElementById('sim-method').value;
+      const idInput = document.getElementById('sim-id');
+      const idSlash = document.getElementById('sim-id-slash');
+      const bodyWrapper = document.getElementById('sim-body-wrapper');
+
+      if (method === 'POST') {
+        idInput.classList.add('hidden');
+        idSlash.classList.add('hidden');
+        bodyWrapper.classList.remove('hidden');
+      } else if (method === 'PUT') {
+        idInput.classList.remove('hidden');
+        idSlash.classList.remove('hidden');
+        bodyWrapper.classList.remove('hidden');
+      } else {
+        idInput.classList.remove('hidden');
+        idSlash.classList.remove('hidden');
+        bodyWrapper.classList.add('hidden');
+      }
+    }
+
+    function loadPreset(presetKey) {
+      const methodEl = document.getElementById('sim-method');
+      const idEl = document.getElementById('sim-id');
+      const bodyEl = document.getElementById('sim-body');
+
+      if (presetKey === 'post_ok') {
+        methodEl.value = 'POST';
+        bodyEl.value = JSON.stringify({
+          kategoria_id: 2,
+          megnevezes: 'Klímatisztítás (inaktív teszt)',
+          alapar: 14900,
+          munkaido_perc: 35,
+          aktiv: 0
+        }, null, 2);
+      } else if (presetKey === 'post_missing') {
+        methodEl.value = 'POST';
+        bodyEl.value = JSON.stringify({
+          kategoria_id: 1,
+          megnevezes: '',
+          alapar: 12000,
+          munkaido_perc: 30,
+          aktiv: 1
+        }, null, 2);
+      } else if (presetKey === 'put_ok') {
+        methodEl.value = 'PUT';
+        idEl.value = '1';
+        bodyEl.value = JSON.stringify({
+          kategoria_id: 1,
+          megnevezes: 'Prémium olajcsere + diagnosztika',
+          alapar: 22900,
+          munkaido_perc: 50,
+          aktiv: 1
+        }, null, 2);
+      } else if (presetKey === 'put_404') {
+        methodEl.value = 'PUT';
+        idEl.value = '99';
+        bodyEl.value = JSON.stringify({
+          kategoria_id: 1,
+          megnevezes: 'Nem létező elem',
+          alapar: 10000,
+          munkaido_perc: 20,
+          aktiv: 1
+        }, null, 2);
+      } else if (presetKey === 'delete_bad_id') {
+        methodEl.value = 'DELETE';
+        idEl.value = 'abc';
+      } else if (presetKey === 'delete_ok') {
+        methodEl.value = 'DELETE';
+        idEl.value = '2';
+      }
+
+      onSimMethodChange();
+      sendSimulatedRequest();
+    }
+
+    function updateSimOutput(status, statusText, sqlText, dbResText, responseObj) {
+      const badge = document.getElementById('sim-status-badge');
+      let badgeColor = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      if (status >= 400 && status < 500) badgeColor = 'bg-amber-500/20 text-amber-300 border border-amber-500/30';
+      if (status === 404) badgeColor = 'bg-rose-500/20 text-rose-300 border border-rose-500/30';
+
+      badge.className = `px-3 py-1 rounded-lg font-mono text-xs font-bold ${badgeColor}`;
+      badge.textContent = `${status} ${statusText}`;
+
+      document.getElementById('sim-sql').textContent = sqlText;
+      document.getElementById('sim-db-result').textContent = dbResText;
+      document.getElementById('sim-response').textContent = JSON.stringify(responseObj, null, 2);
+    }
+
+    function sendSimulatedRequest() {
+      const method = document.getElementById('sim-method').value;
+      const rawId = document.getElementById('sim-id').value.trim();
+      const rawBody = document.getElementById('sim-body').value.trim();
+
+      let parsedBody = {};
+      if (method === 'POST' || method === 'PUT') {
+        if (rawBody !== '') {
+          try {
+            parsedBody = JSON.parse(rawBody);
+          } catch (e) {
+            updateSimOutput(
+              400, 'Bad Request',
+              '// Nem futott le SQL – az express.json() hibás JSON szintaxist talált.',
+              '// Nincs adatbázis művelet',
+              { hiba: 'Érvénytelen JSON formátum a kérés törzsében!' }
+            );
+            return;
+          }
+        }
+      }
+
+      // --- POST /szolgaltatasok ---
+      if (method === 'POST') {
+        const { kategoria_id, megnevezes, alapar, munkaido_perc, aktiv } = parsedBody || {};
+        if (
+          kategoria_id === undefined ||
+          !megnevezes ||
+          alapar === undefined ||
+          munkaido_perc === undefined ||
+          aktiv === undefined
+        ) {
+          updateSimOutput(
+            400, 'Bad Request',
+            '// A validáció megállította a kérést, SQL nem futott le.',
+            '// Nincs adatbázis művelet',
+            { hiba: 'Minden mező megadása kötelező' }
+          );
+          return;
+        }
+
+        const newId = nextAutoIncrementId++;
+        dbRows.push({ id: newId, kategoria_id, megnevezes, alapar, munkaido_perc, aktiv });
+        renderDbTable(newId);
+
+        updateSimOutput(
+          201, 'Created',
+          `INSERT INTO szolgaltatasok (kategoria_id, megnevezes, alapar, munkaido_perc, aktiv)\nVALUES (?, ?, ?, ?, ?)\n-- Paraméterek: [${kategoria_id}, "${megnevezes}", ${alapar}, ${munkaido_perc}, ${aktiv}]`,
+          JSON.stringify({ affectedRows: 1, insertId: newId }, null, 2),
+          { uzenet: 'A szolgáltatás létrehozása sikeres', id: newId }
+        );
+        return;
+      }
+
+      // --- PUT /szolgaltatasok/:id ---
+      if (method === 'PUT') {
+        if (!ervenyesId(rawId)) {
+          updateSimOutput(
+            400, 'Bad Request',
+            `// ervenyesId("${rawId}") === false → SQL nem futott le.`,
+            '// Nincs adatbázis művelet',
+            { hiba: 'Érvénytelen azonosító' }
+          );
+          return;
+        }
+
+        const { kategoria_id, megnevezes, alapar, munkaido_perc, aktiv } = parsedBody || {};
+        if (
+          kategoria_id === undefined ||
+          megnevezes === undefined ||
+          alapar === undefined ||
+          munkaido_perc === undefined ||
+          aktiv === undefined
+        ) {
+          updateSimOutput(
+            400, 'Bad Request',
+            '// Hiányzó mező a PUT kérésben → SQL nem futott le.',
+            '// Nincs adatbázis művelet',
+            { hiba: 'A módosításhoz minden mező megadása szükséges' }
+          );
+          return;
+        }
+
+        const targetId = Number(rawId);
+        const idx = dbRows.findIndex((r) => r.id === targetId);
+        const sqlLog = `UPDATE szolgaltatasok\nSET kategoria_id = ?, megnevezes = ?, alapar = ?, munkaido_perc = ?, aktiv = ?\nWHERE id = ?\n-- Paraméterek: [${kategoria_id}, "${megnevezes}", ${alapar}, ${munkaido_perc}, ${aktiv}, ${targetId}]`;
+
+        if (idx === -1) {
+          updateSimOutput(
+            404, 'Not Found',
+            sqlLog,
+            JSON.stringify({ affectedRows: 0, changedRows: 0 }, null, 2),
+            { hiba: 'A szolgáltatás nem található' }
+          );
+          return;
+        }
+
+        dbRows[idx] = { id: targetId, kategoria_id, megnevezes, alapar, munkaido_perc, aktiv };
+        renderDbTable(targetId);
+
+        updateSimOutput(
+          200, 'OK',
+          sqlLog,
+          JSON.stringify({ affectedRows: 1, changedRows: 1 }, null, 2),
+          { uzenet: 'A szolgáltatás módosítása sikeres' }
+        );
+        return;
+      }
+
+      // --- DELETE /szolgaltatasok/:id ---
+      if (method === 'DELETE') {
+        if (!ervenyesId(rawId)) {
+          updateSimOutput(
+            400, 'Bad Request',
+            `// ervenyesId("${rawId}") === false → SQL nem futott le.`,
+            '// Nincs adatbázis művelet',
+            { hiba: 'Érvénytelen azonosító' }
+          );
+          return;
+        }
+
+        const targetId = Number(rawId);
+        const idx = dbRows.findIndex((r) => r.id === targetId);
+        const sqlLog = `DELETE FROM szolgaltatasok WHERE id = ?\n-- Paraméterek: [${targetId}]`;
+
+        if (idx === -1) {
+          updateSimOutput(
+            404, 'Not Found',
+            sqlLog,
+            JSON.stringify({ affectedRows: 0 }, null, 2),
+            { hiba: 'A szolgáltatás nem található' }
+          );
+          return;
+        }
+
+        dbRows.splice(idx, 1);
+        renderDbTable();
+
+        updateSimOutput(
+          200, 'OK',
+          sqlLog,
+          JSON.stringify({ affectedRows: 1 }, null, 2),
+          { uzenet: 'A szolgáltatás törlése sikeres' }
+        );
+      }
+    }
+
+    // =========================================================================
+    // 5. ÖNELLENŐRZŐ KVÍZ
+    // =========================================================================
+    const quizQuestions = [
+      {
+        q: '1. Miért használunk "aktiv === undefined" feltételt "!aktiv" helyett a POST végpontban?',
+        options: [
+          'Mert az "aktiv" mező szöveges típusú az adatbázisban.',
+          'Mert ha aktiv értéke 0 (inaktív), akkor a "!0" igaz lenne és tévesen 400-as hibát dobna.',
+          'Mert a JavaScriptben nem létezik a "!" operátor számokra.',
+          'Mert a MySQL csak az undefined értéket fogadja el.'
+        ],
+        correct: 1,
+        explanation: 'A 0 hamisnak kiértékelődő (falsy) érték JavaScriptben, ezért !0 === true. A szigorú === undefined viszont csak akkor igaz, ha a kulcs tényleg hiányzik a JSON-ből.'
+      },
+      {
+        q: '2. Milyen HTTP státuszkódot küld vissza a szerver sikeres INSERT (POST) művelet után, és honnan tudja az új rekord azonosítóját?',
+        options: [
+          '200 OK, és a result.affectedRows mezőből.',
+          '204 No Content, és a req.params.id mezőből.',
+          '201 Created, és a result.insertId mezőből.',
+          '400 Bad Request, és a result.newId mezőből.'
+        ],
+        correct: 2,
+        explanation: 'Új erőforrás létrehozásakor a szabványos kód a 201 Created, a MySQL driver pedig a result.insertId mezőben adja vissza az új AUTO_INCREMENT kulcsot.'
+      },
+      {
+        q: '3. Mi történik a PUT vagy DELETE végpontban, ha érvényes szám az ID (pl. 999), de nincs ilyen sor a táblában?',
+        options: [
+          'A MySQL hibát dob, így a szerver 500-as választ ad.',
+          'A result.affectedRows értéke 0 lesz, amit a kód elkap és 404 Not Found választ küld.',
+          'A szerver automatikusan létrehozza a 999-es rekordot.',
+          'Az ervenyesId() függvény 400-as hibával megállítja.'
+        ],
+        correct: 1,
+        explanation: 'A MySQL nem dob hibát, ha a WHERE feltételre nem illeszkedik sor, hanem affectedRows: 0 értékkel tér vissza. Ezt ellenőrizzük a 404-es válaszhoz.'
+      },
+      {
+        q: '4. Miért van szükség a "req.body || {}" kifejezésre a destrukturálásnál?',
+        options: [
+          'Hogy gyorsabb legyen az SQL lekérdezés.',
+          'Hogy ne omoljon össze a szerver (TypeError), ha a kliens nem küldött JSON törzset vagy Content-Type fejlécet.',
+          'Mert az Express csak üres objektumokat tud feldolgozni.',
+          'Hogy automatikusan feltöltse a hiányzó mezőket null értékkel.'
+        ],
+        correct: 1,
+        explanation: 'Ha a req.body undefined, akkor a "const { alapar } = undefined" futási idejű hibát okozna. A "|| {}" biztonságosan üres objektumot ad helyette.'
+      },
+      {
+        q: '5. A PUT /szolgaltatasok/:id lekérdezés paramétertömbjében hova kell kerülnie a Number(req.params.id) értéknek?',
+        options: [
+          'Az első helyre, mert az elsődleges kulcs a legfontosabb.',
+          'Mindegy, a MySQL név alapján párosítja.',
+          'Az utolsó (6.) helyre, mert az SQL-ben a WHERE id = ? kérdőjel van a végén.',
+          'Nem kell a tömbbe tenni, a req.body-ból kiolvassa.'
+        ],
+        correct: 2,
+        explanation: 'A "?" helyőrzők szigorúan sorrendben kapják meg a tömb elemeit. Mivel 5 mező van a SET-ben és 1 a WHERE-ben, az ID kötelezően az utolsó elem.'
+      },
+      {
+        q: '6. Mi a szerepe a "try { ... } catch (err) { next(err); }" szerkezetnek mindhárom végpontban?',
+        options: [
+          'Újrapróbálja a lekérdezést hiba esetén.',
+          'Elkapja a váratlan szerver/adatbázis hibákat és továbbítja a központi 500-as JSON hibakezelőnek.',
+          'Átugorja a validációt, ha a felhasználó admin.',
+          'Leállítja a Node.js szervert hiba esetén.'
+        ],
+        correct: 1,
+        explanation: 'Aszinkron Express végpontokban a catch ágban meghívott next(err) gondoskodik róla, hogy a kliens ne időtúllépést, hanem egységes 500-as JSON választ kapjon.'
+      }
+    ];
+
+    let quizAnswers = {};
+
+    function renderQuiz() {
+      const container = document.getElementById('quiz-container');
+      container.innerHTML = '';
+      document.getElementById('quiz-total').textContent = quizQuestions.length;
+      updateQuizScore();
+
+      quizQuestions.forEach((item, qIdx) => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3';
+
+        const title = document.createElement('h3');
+        title.className = 'text-sm sm:text-base font-bold text-white';
+        title.textContent = item.q;
+        card.appendChild(title);
+
+        const optsDiv = document.createElement('div');
+        optsDiv.className = 'grid grid-cols-1 gap-2';
+
+        item.options.forEach((optText, oIdx) => {
+          const btn = document.createElement('button');
+          const answered = quizAnswers[qIdx] !== undefined;
+          let btnStyle = 'bg-slate-950 border-slate-800 text-slate-300 hover:border-indigo-500/60';
+
+          if (answered) {
+            if (oIdx === item.correct) {
+              btnStyle = 'bg-emerald-500/20 border-emerald-500 text-emerald-200 font-semibold';
+            } else if (oIdx === quizAnswers[qIdx] && oIdx !== item.correct) {
+              btnStyle = 'bg-rose-500/20 border-rose-500 text-rose-200';
+            } else {
+              btnStyle = 'bg-slate-950/50 border-slate-800 text-slate-500';
+            }
+          }
+
+          btn.className = `text-left px-4 py-3 rounded-xl border text-xs sm:text-sm transition-all ${btnStyle}`;
+          btn.disabled = answered;
+          btn.textContent = optText;
+          btn.onclick = () => {
+            quizAnswers[qIdx] = oIdx;
+            renderQuiz();
+          };
+          optsDiv.appendChild(btn);
+        });
+
+        card.appendChild(optsDiv);
+
+        if (quizAnswers[qIdx] !== undefined) {
+          const isRight = quizAnswers[qIdx] === item.correct;
+          const exp = document.createElement('div');
+          exp.className = `p-3.5 rounded-xl text-xs sm:text-sm border ${
+            isRight
+              ? 'bg-emerald-950/50 border-emerald-500/30 text-emerald-200'
+              : 'bg-rose-950/50 border-rose-500/30 text-rose-200'
+          }`;
+          exp.innerHTML = `<strong>${isRight ? '✓ Helyes!' : '✗ Nem egészen!'}</strong> ${item.explanation}`;
+          card.appendChild(exp);
+        }
+
+        container.appendChild(card);
+      });
+    }
+
+    function updateQuizScore() {
+      let score = 0;
+      quizQuestions.forEach((q, idx) => {
+        if (quizAnswers[idx] === q.correct) score++;
+      });
+      document.getElementById('quiz-score').textContent = score;
+    }
+
+    function resetQuiz() {
+      quizAnswers = {};
+      renderQuiz();
+      showToast('Kvíz újraindítva!', 'info');
+    }
+
+    // =========================================================================
+    // INICIALIZÁLÁS OLDALBETÖLTÉSKOR
+    // =========================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+      renderCodeEndpoint('post');
+      initFalsyLab();
+      resetDatabase();
+      loadPreset('post_ok');
+      renderQuiz();
+    });
+  </script>
+</body>
+</html>
